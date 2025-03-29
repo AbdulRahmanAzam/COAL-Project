@@ -806,11 +806,11 @@ DisplayBoard PROC
 		mov eax, YELLOW
 		call SetTextColor
 
-		; Calculate exact marker position (column * 4 + 2)
+		; Calculate exact marker position (column * 4 + 1)
 		mov eax, selectedCol
 		mov ebx, 4
 		mul ebx                 ; column * 4 (each column is 4 chars wide in display)
-		add eax, 1              ; +2 to center (adjust this value if needed)
+		add eax, 1              ; +1 to centre it
 		mov ecx, eax
 
 		; Draw leading spaces
