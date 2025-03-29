@@ -212,134 +212,143 @@ DropPiece PROC
 		ret
 DropPiece ENDP
 
-
 CheckWin PROC
     pushad
     
-		mov esi, OFFSET board
-		mov eax, lastRow       ; 
-		mov ebx, lastCol       ; loc of last piece placed
+    mov esi, OFFSET board
+    mov eax, lastRow       ; 
+    mov ebx, lastCol       ; loc of last piece placed
     
-		; row * COLS + col * 4 = formula to get index of any piece placed
-		imul eax, COLS
-		add eax, ebx
-		imul eax, 4
-		add esi, eax           ; ESI points to placed piece
+    ; row * COLS + col * 4 = formula to get index of any piece placed
+    imul eax, COLS
+    add eax, ebx
+    imul eax, 4
+    add esi, eax           ; ESI points to placed piece
     
-		mov edi, currentPlayer ; symbol (can be O or X)
-		mov ecx, 3             ; 3 matches excluding piece itself
+    mov edi, currentPlayer ; symbol (can be O or X)
+    mov ecx, 3             ; 3 matches needed (excluding piece itself)
     
     ; ---- Check Horizontal (Left-Right) ----
-
-		mov edx, esi           ; Start from placed piece
-		mov ebx, ecx           ; Reset counter
-	Horizontal:
-		sub edx, 4             ; Move left
-		cmp edx, OFFSET board  ; Boundary check (shoudnt go off the border from left thats why only board)
-		jl HorizontalDone	   ; jmp if less than
-		cmp [edx], edi		   ; Match Check 
-		jne HorizontalDone	   ; jmp if not equal
-		dec ebx				   ; else decrement counter
-		jz WinFound			   ; jmp if 0
-		jmp Horizontal			
-
-	HorizontalDone:
-		mov edx, esi           ; Reset to placed piece
-		mov ebx, ecx           ; Reset counter
-	HorizontalRight:
-		add edx, 4								; Move right
-		cmp edx, OFFSET board +	 (ROWS*COLS*4) ; Boundary check (from the right hand side thats why the addition with (R*C*4) to get index (in bytes))
-		jge Vertical				; jmp if greater/equals to
-		cmp [edx], edi				; Match check
-		jne Vertical				; jmp if not equal
-		dec ebx						; else decrement counter
-		jz WinFound					; jmp if 0
-		jmp HorizontalRight
+    mov edx, esi           ; Start from placed piece
+    mov ebx, ecx           ; Reset counter
+HorizontalLeft:
+    sub edx, 4             ; Move left
+    cmp edx, OFFSET board  ; Boundary check
+    jl HorizontalRight     ; if out of bounds, check right
+    cmp [edx], edi         ; Match Check 
+    jne HorizontalRight    ; if no match, check right
+    dec ebx                ; else decrement counter
+    jz WinFound            ; if counter=0, win found
+    jmp HorizontalLeft
     
-    ; ---- Check Vertical (Up) ----
-
-	Vertical:
-		mov edx, esi				; Reset to placed piece
-		mov ebx, ecx				; Reset counter
-	VerticalUp:
-		sub edx, COLS*4				; Move up (row-1)
-		cmp edx, OFFSET board		; Boundary check (shoudnt go off the border from left thats why only board)
-		jl Diagonal1				; jmp if less than
-		cmp [edx], edi				; Match Check 
-		jne Diagonal1				; jmp if not equal
-		dec ebx						; else decrement counter
-		jz WinFound					; jmp if 0
-		jmp VerticalUp
+HorizontalRight:
+    mov edx, esi           ; Reset to placed piece
+    add edx, 4             ; Start checking right of current piece
+    mov ebx, ecx           ; Reset counter
+HorizontalRightLoop:
+    cmp edx, OFFSET board + (ROWS*COLS*4) ; Boundary check
+    jge Vertical           ; if out of bounds, check vertical
+    cmp [edx], edi         ; Match check
+    jne Vertical           ; if no match, check vertical
+    dec ebx                ; else decrement counter
+    jz WinFound            ; if counter=0, win found
+    add edx, 4             ; move right
+    jmp HorizontalRightLoop
+    
+    ; ---- Check Vertical (Up-Down) ----
+Vertical:
+    mov edx, esi           ; Reset to placed piece
+    mov ebx, ecx           ; Reset counter
+VerticalUp:
+    sub edx, COLS*4        ; Move up (row-1)
+    cmp edx, OFFSET board  ; Boundary check
+    jl VerticalDown        ; if out of bounds, check down
+    cmp [edx], edi         ; Match Check 
+    jne VerticalDown       ; if no match, check down
+    dec ebx                ; else decrement counter
+    jz WinFound            ; if counter=0, win found
+    jmp VerticalUp
+    
+VerticalDown:
+    mov edx, esi           ; Reset to placed piece
+    add edx, COLS*4        ; Start checking below current piece
+    mov ebx, ecx           ; Reset counter
+VerticalDownLoop:
+    cmp edx, OFFSET board + (ROWS*COLS*4) ; Boundary check
+    jge Diagonal1          ; if out of bounds, check diagonal
+    cmp [edx], edi         ; Match check
+    jne Diagonal1          ; if no match, check diagonal
+    dec ebx                ; else decrement counter
+    jz WinFound            ; if counter=0, win found
+    add edx, COLS*4        ; move down
+    jmp VerticalDownLoop
     
     ; ---- Check Diagonal \ (UpLeft-DownRight) ----
-
-	Diagonal1:
-		mov edx, esi				; Reset to placed piece
-		mov ebx, ecx				; Reset counter
-	Diagonal1Up:
-		sub edx, (COLS+1)*4			; Up-left
-		cmp edx, OFFSET board		; Boundary check (shoudnt go off the border from left thats why only board)
-		jl Diagonal1DownCheck		; jmp if less than
-		cmp [edx], edi				; Match Check 
-		jne Diagonal1DownCheck		; jmp if not equal
-		dec ebx						; else decrement counter
-		jz WinFound					; jmp if 0
-		jmp Diagonal1Up
-
-	Diagonal1DownCheck:
-		mov edx, esi
-		mov ebx, ecx
-	Diagonal1Down:
-		add edx, (COLS+1)*4					  ; Down-right
-		cmp edx, OFFSET board + (ROWS*COLS*4) ; Boundary check (from the right hand side)
-		jge Diagonal2						  ; jmp if greater/equals to
-		cmp [edx], edi						  ; Match check
-		jne Diagonal2						  ; jmp if not equal
-		dec ebx								  ; else decrement counter
-		jz WinFound							  ; jmp if 0
-		jmp Diagonal1Down
+Diagonal1:
+    mov edx, esi           ; Reset to placed piece
+    mov ebx, ecx           ; Reset counter
+Diagonal1Up:
+    sub edx, (COLS+1)*4    ; Up-left
+    cmp edx, OFFSET board  ; Boundary check
+    jl Diagonal1Down       ; if out of bounds, check down-right
+    cmp [edx], edi         ; Match Check 
+    jne Diagonal1Down      ; if no match, check down-right
+    dec ebx                ; else decrement counter
+    jz WinFound            ; if counter=0, win found
+    jmp Diagonal1Up
+    
+Diagonal1Down:
+    mov edx, esi           ; Reset to placed piece
+    add edx, (COLS+1)*4    ; Start checking down-right
+    mov ebx, ecx           ; Reset counter
+Diagonal1DownLoop:
+    cmp edx, OFFSET board + (ROWS*COLS*4) ; Boundary check
+    jge Diagonal2          ; if out of bounds, check other diagonal
+    cmp [edx], edi         ; Match check
+    jne Diagonal2          ; if no match, check other diagonal
+    dec ebx                ; else decrement counter
+    jz WinFound            ; if counter=0, win found
+    add edx, (COLS+1)*4    ; move down-right
+    jmp Diagonal1DownLoop
     
     ; ---- Check Diagonal / (UpRight-DownLeft) ----
+Diagonal2:
+    mov edx, esi           ; Reset to placed piece
+    mov ebx, ecx           ; Reset counter
+Diagonal2Up:
+    sub edx, (COLS-1)*4    ; Up-right
+    cmp edx, OFFSET board  ; Boundary check
+    jl Diagonal2Down       ; if out of bounds, check down-left
+    cmp [edx], edi         ; Match Check 
+    jne Diagonal2Down      ; if no match, check down-left
+    dec ebx                ; else decrement counter
+    jz WinFound            ; if counter=0, win found
+    jmp Diagonal2Up
+    
+Diagonal2Down:
+    mov edx, esi           ; Reset to placed piece
+    add edx, (COLS-1)*4    ; Start checking down-left
+    mov ebx, ecx           ; Reset counter
+Diagonal2DownLoop:
+    cmp edx, OFFSET board + (ROWS*COLS*4) ; Boundary check
+    jge NoWin              ; if out of bounds, no win
+    cmp [edx], edi         ; Match check
+    jne NoWin              ; if no match, no win
+    dec ebx                ; else decrement counter
+    jz WinFound            ; if counter=0, win found
+    add edx, (COLS-1)*4    ; move down-left
+    jmp Diagonal2DownLoop
+    
+NoWin:
+    popad
+    xor eax, eax           ; Return 0 (no win)
+    ret
 
-	Diagonal2:
-		mov edx, esi			; Reset to placed piece
-		mov ebx, ecx			; Reset counter
-	Diagonal2Up:
-		sub edx, (COLS-1)*4     ; Up-right
-		cmp edx, OFFSET board	; Boundary check (shoudnt go off the border from left thats why only board)
-		jl Diagonal2DownCheck	; jmp if less than
-		cmp [edx], edi			; Match Check 
-		jne Diagonal2DownCheck	; jmp if not equal
-		dec ebx					; else decrement counter
-		jz WinFound				; jmp if 0
-		jmp Diagonal2Up
-
-	Diagonal2DownCheck:
-		mov edx, esi
-		mov ebx, ecx
-	Diagonal2Down:
-		add edx, (COLS-1)*4						; Down-left
-		cmp edx, OFFSET board + (ROWS*COLS*4)	; Boundary check (from the right hand side)
-		jge NoWin								; jmp if greater/equals to
-		cmp [edx], edi							; Match check
-		jne NoWin								; jmp if not equal
-		dec ebx									; else decrement counter
-		jz WinFound								; jmp if 0
-		jmp Diagonal2Down						
-
-
-	NoWin:
-		popad
-		xor eax, eax           ; Return 0 (no win)
-		ret
-
-	WinFound:
-		popad
-		mov eax, 1             ; Return 1 (win)
-		ret
-
+WinFound:
+    popad
+    mov eax, 1             ; Return 1 (win)
+    ret
 CheckWin ENDP
-
 
 IsDraw PROC
     push esi                 ; Save registers used
@@ -797,10 +806,11 @@ DisplayBoard PROC
 		mov eax, YELLOW
 		call SetTextColor
 
+		; Calculate exact marker position (column * 4 + 2)
 		mov eax, selectedCol
 		mov ebx, 4
 		mul ebx                 ; column * 4 (each column is 4 chars wide in display)
-		add eax, 1              ; +1 to centre
+		add eax, 1              ; +2 to center (adjust this value if needed)
 		mov ecx, eax
 
 		; Draw leading spaces
