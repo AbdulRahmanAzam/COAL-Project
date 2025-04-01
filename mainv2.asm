@@ -1,5 +1,7 @@
 INCLUDE Irvine32.inc
 INCLUDELIB kernel32.lib
+INCLUDELIB winmm.lib   ; For PlaySound
+PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
 
 .data
 	mainborder BYTE "=============================================================================",10,13,0
@@ -63,6 +65,7 @@ INCLUDELIB kernel32.lib
 	space BYTE " ", 0
 	marker BYTE "  ^  ",0
 	border BYTE " +---+---+---+---+---+---+---+ ", 0
+	columnNumbers BYTE "   1   2   3   4   5   6   7", 0
 	spacesPerCol DWORD 5
 	selectedCol DWORD 0
 
@@ -110,7 +113,50 @@ INCLUDELIB kernel32.lib
 	temp2 BYTE "Two Player Game",10,13,0
 	printing BYTE "Print Option", 0
 
+	;Sound effects
+	SND_FILENAME   EQU 20000h
+	SND_ASYNC      EQU 1
+	SND_NODEFAULT EQU 2
+	errorSoundPath BYTE "C:\Users\CZ3\source\repos\Connect-4\Debug\error.wav", 0
+	clickSoundPath BYTE "C:\Users\CZ3\source\repos\Connect-4\Debug\click.wav", 0
+	moveSoundPath BYTE "C:\Users\CZ3\source\repos\Connect-4\Debug\marker.wav", 0
+	winSoundPath BYTE "C:\Users\CZ3\source\repos\Connect-4\Debug\win.wav", 0
+
+
 .code
+
+
+PlayClickSound PROC
+    pushad
+    INVOKE PlaySound, OFFSET clickSoundPath, 0, SND_FILENAME OR SND_ASYNC
+    popad
+    ret
+PlayClickSound ENDP
+
+
+PlayErrorSound PROC
+	pushad
+	INVOKE PlaySound, OFFSET errorSoundPath, 0, SND_FILENAME OR SND_ASYNC
+	popad
+	ret
+PlayErrorSound ENDP
+
+
+PlayCursorSound PROC
+	pushad
+	INVOKE PlaySound, OFFSET moveSoundPath, 0, SND_FILENAME OR SND_ASYNC OR SND_NODEFAULT
+	popad
+	ret
+PlayCursorSound ENDP
+
+
+PlayWinSound PROC
+	pushad
+	INVOKE PlaySound, OFFSET winSoundPath, 0, SND_FILENAME OR SND_ASYNC
+	popad
+	ret
+PlayWinSound ENDP
+
 
 GetPlayerMove PROC
     pushad                   ; Save all registers
@@ -134,12 +180,15 @@ GetPlayerMove PROC
 		cmp selectedCol, 0		; if at left edge
 		jle InputLoop           ; ignore and take input again
 		dec selectedCol			; col-1
+		call PlayCursorSound
 		jmp UpdateDisplay		; update board
 
 	MoveRight:
 		cmp selectedCol, COLS-1 ; if at right most edge
 		jge InputLoop           ; ignore and take input again
 		inc selectedCol			; col+1
+		call  PlayCursorSound
+
 
 	UpdateDisplay:
 		call DisplayBoard       ; Immediate updation of board :)
@@ -158,6 +207,7 @@ GetPlayerMove PROC
 		call Crlf
 		mov eax, RED
 		call SetTextColor
+		call PlayErrorSound
 		mov edx, OFFSET invalidMoveMsg  ; whole thing is for if top of the col has piece on it and we try to still press enter so 
 		call WriteString				; it wil give an error of invalid move in red color and will go back to inputloop for valid prompt 
 		mov eax, DEFAULT
@@ -204,6 +254,8 @@ DropPiece PROC
 		mov edx, currentPlayer	; Place player's symbol
 		mov [edi + esi], edx	
     
+		call PlayClickSound
+
 		; Storing just so we can use it in CheckWin acc to the position
 		mov lastRow, ebx        ; Row where the piece was placed
 		mov lastCol, eax        ; Selected column
@@ -349,6 +401,8 @@ WinFound:
     mov eax, 1             ; Return 1 (win)
     ret
 CheckWin ENDP
+
+
 
 IsDraw PROC
     push esi                 ; Save registers used
@@ -535,12 +589,21 @@ PlayerToPlayer PROC
         
         cmp currentPlayer, PLAYER1
         je Player1Turn
+        
+        mov eax, GREEN           ; Set color for Player 2
+        call SetTextColor
         mov edx, OFFSET player2Msg
         jmp ShowTurn
+    
     Player1Turn:
+        mov eax, RED             ; Set color for Player 1
+        call SetTextColor
         mov edx, OFFSET player1Msg
+    
     ShowTurn:
         call WriteString
+        mov eax, DEFAULT         ; Reset text color
+        call SetTextColor
         
         call GetPlayerMove
         call DropPiece
@@ -557,6 +620,7 @@ PlayerToPlayer PROC
         je SetPlayer2
         mov currentPlayer, PLAYER1
         jmp GameLoop
+    
     SetPlayer2:
         mov currentPlayer, PLAYER2
         jmp GameLoop
@@ -565,12 +629,23 @@ PlayerToPlayer PROC
         call DisplayBoard
         cmp currentPlayer, PLAYER1
         je Player1Wins
+		call PlayWinSound
+        
+        mov eax, GREEN           ; Set color for Player 2 Win Message
+        call SetTextColor
         mov edx, OFFSET player2WinMsg
         jmp ShowResult
+    
     Player1Wins:
+		call PlayWinSound
+        mov eax, RED             ; Set color for Player 1 Win Message
+        call SetTextColor
         mov edx, OFFSET player1WinMsg
+    
     ShowResult:
         call WriteString
+        mov eax, DEFAULT         ; Reset text color
+        call SetTextColor
         ret
         
     GameTied:
@@ -578,6 +653,7 @@ PlayerToPlayer PROC
         mov edx, OFFSET draw
         call WriteString
         ret
+
 PlayerToPlayer ENDP
 
  ; ==================================================================== DISPLAY MENU
@@ -712,17 +788,17 @@ GetMenuInput ENDP
 	
 ; ==================================================================== INITIALIZE BOARD
 InitializeBoard PROC		
-	mov ecx, ROWS * COLS
-	mov esi, OFFSET board
-	mov eax, EMPTY
+    mov ecx, ROWS * COLS
+    mov esi, OFFSET board
+    mov eax, EMPTY
 
-	fillLoop:
-		mov [esi], eax
-		add esi, 4
-		loop fillLoop
+fillLoop:
+    mov [esi], eax
+    add esi, 4
+    loop fillLoop
 
-	mov selectedCol, 0
-	ret
+    mov selectedCol, 0
+    ret
 InitializeBoard ENDP
 
 
@@ -730,104 +806,131 @@ InitializeBoard ENDP
 DisplayBoard PROC
 	call ClrScr
 
+	;=============== Display column numbers
+	mov eax, YELLOW
+	call SetTextColor
+	mov edx, OFFSET columnNumbers
+	call WriteString
+	call CrLf
+
 	mov ecx, ROWS
 	mov esi, OFFSET board
-
+	
 	RowLoop:
 		push ecx
 
-		;=============== top border of the row
-		mov eax, YELLOW
+		;=============== top border of the row (BLUE)
+		mov eax, BLUE
 		call SetTextColor
 		mov edx, OFFSET border
 		call WriteString
 		call CrLf
 		
 		;================ Middle of the row with pieces
-			mov eax, DEFAULT
-			call SetTextColor
-			mov ecx, COLS
-
-		CellLoop:
-			mov edx, OFFSET vline    ; print | on every box
-			call WriteString
-
-			mov eax, [esi]
-			cmp al, PLAYER1
-			JE RedX
-			cmp al, PLAYER2
-			JE GreenO
-			JMP PrintEmpty
-
-			RedX:
-				mov eax, RED
-				call SetTextColor
-				mov eax, [esi]
-				JMP PrintCell
-
-			GreenO:
-				mov eax, GREEN
-				call SetTextColor
-				mov eax, [esi]
-				JMP PrintCell
-
-			
-				PrintCell:
-					call WriteChar
-					mov eax, DEFAULT
-					call SetTextColor
-					JMP nextCell
-
-			PrintEmpty:
-				mov edx, OFFSET space
-				call WriteString
-
-			nextCell:
-				add esi, 4
-				dec ecx
-				JNZ CellLoop
-
-			mov edx, OFFSET vline
-			call WriteString
-			call CrLf
-
-			pop ecx
-			dec ecx
-			JNZ RowLoop
-
-		; ===========  bottom border
-		mov eax, YELLOW 
+		mov eax, DEFAULT
 		call SetTextColor
-		mov edx, OFFSET border
-		call WriteString
-		call CrLf
+		mov ecx, COLS
 
-		;=============== Marker Row
+	CellLoop:
+		mov edx, OFFSET vline    ; print | on every box (BLUE)
+		mov eax, BLUE
+		call SetTextColor
+		call WriteString
+
+		mov eax, [esi]
+		cmp al, PLAYER1
+		JE RedX
+		cmp al, PLAYER2
+		JE GreenO
+		JMP PrintEmpty
+
+	RedX:
+		; Check if this piece is part of the winning sequence
+		cmp eax, 1
+		je HighlightWin
+		mov eax, RED
+		call SetTextColor
+		mov eax, [esi]
+		JMP PrintCell
+
+	GreenO:
+		cmp eax, 1
+		je HighlightWin
+		mov eax, GREEN
+		call SetTextColor
+		mov eax, [esi]
+		JMP PrintCell
+
+	HighlightWin:
 		mov eax, YELLOW
 		call SetTextColor
+		mov eax, [esi]
+		JMP PrintCell
 
-		; Calculate exact marker position (column * 4 + 1)
-		mov eax, selectedCol
-		mov ebx, 4
-		mul ebx                 ; column * 4 (each column is 4 chars wide in display)
-		add eax, 1              ; +1 to centre it
-		mov ecx, eax
+	PrintCell:
+		call WriteChar
+		mov eax, DEFAULT
+		call SetTextColor
+		JMP nextCell
 
-		; Draw leading spaces
-		DrawSpaces:
-			mov edx, OFFSET space
-			call WriteString
-			loop DrawSpaces
+	PrintEmpty:
+		mov edx, OFFSET space
+		call WriteString
 
-		PrintMarker: 
-			mov eax, RED
-			call SetTextColor
-			mov edx, OFFSET marker
-			call WriteString
-			call CrLf
-			mov eax, DEFAULT
-			call SetTextColor
-		ret
+	nextCell:
+		add esi, 4
+		dec ecx
+		JNZ CellLoop
+
+	mov edx, OFFSET vline
+	mov eax, BLUE
+	call SetTextColor
+	call WriteString
+	call CrLf
+
+	pop ecx
+	dec ecx
+	JNZ RowLoop
+
+	; ===========  bottom border (BLUE)
+	mov eax, BLUE
+	call SetTextColor
+	mov edx, OFFSET border
+	call WriteString
+	call CrLf
+
+	;=============== Marker Row
+	cmp currentPlayer, PLAYER1
+	je Player1Marker
+
+	mov eax, GREEN  ; Set color for Player 2 pointer
+	call SetTextColor
+	jmp ShowMarker
+
+Player1Marker:
+	mov eax, RED    ; Set color for Player 1 pointer
+	call SetTextColor
+
+ShowMarker:
+	mov eax, selectedCol
+	mov ebx, 4
+	mul ebx                 ; column * 4 (each column is 4 chars wide in display)
+	add eax, 1              ; +1 to centre it
+	mov ecx, eax
+
+	; Draw leading spaces
+	DrawSpaces:
+		mov edx, OFFSET space
+		call WriteString
+		loop DrawSpaces
+
+	mov edx, OFFSET marker
+	call WriteString
+	call CrLf
+	mov eax, DEFAULT
+	call SetTextColor
+
+	ret
 
 DisplayBoard ENDP
 
