@@ -1,6 +1,6 @@
 INCLUDE Irvine32.inc
 INCLUDELIB kernel32.lib
-INCLUDELIB winmm.lib   ; For PlaySound
+INCLUDELIB winmm.lib
 PlaySound PROTO, pszSound:PTR BYTE, hmod:DWORD, fdwSound:DWORD
 
 .data
